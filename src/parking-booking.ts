@@ -11,7 +11,7 @@ const VEHICLE_ID = process.env.VEHICLE_ID; // This should be the visible text in
 
 // --- Interfaces ---
 interface Booking {
-  parking_date: string; // YYYY-MM-DD
+  parking_date: string; //<y_bin_46>-MM-DD
   status: "pending" | "booked" | "failed" | "no_spaces";
   created_at: string; // ISO Date string
   last_attempt: string | null; // ISO Date string
@@ -29,7 +29,6 @@ async function loadBookings(): Promise<Booking[]> {
   try {
     const data = await fs.readFile(BOOKINGS_FILE, "utf8");
     const bookings = JSON.parse(data) as Booking[];
-    // Validate structure of each booking if necessary
     return bookings.filter((b) => b.parking_date && b.status && b.created_at);
   } catch (error: any) {
     if (error.code === "ENOENT") {
@@ -80,12 +79,10 @@ async function updateBookingStatus(
     );
   }
 
-  // Remove old successfully booked or failed bookings (older than 7 days)
   const sevenDaysAgo = addDays(new Date(), -7);
   const filteredBookings = bookings.filter((b) => {
     const bookingDateObj = parseISO(b.parking_date);
-    if (!isValidDate(bookingDateObj)) return false; // Keep invalid date entries for manual review or filter out
-    // Keep if recent OR if status is pending OR if it's a 'no_spaces' for a future date
+    if (!isValidDate(bookingDateObj)) return false;
     return (
       bookingDateObj >= sevenDaysAgo ||
       b.status === "pending" ||
@@ -101,36 +98,111 @@ async function loginToWayleadr(page: Page): Promise<boolean> {
   try {
     logger("INFO", "Navigating to Wayleadr login page...");
     await page.goto("https://app.wayleadr.com/users/sign_in", {
-      waitUntil: "networkidle",
+      waitUntil: "domcontentloaded",
+      timeout: 60000,
     });
 
     logger("INFO", "Waiting for login form elements...");
     await page.waitForSelector("#user_email", { timeout: 30000 });
+    await page.waitForSelector("#user_password", { timeout: 10000 });
 
     logger("INFO", "Entering login credentials...");
     await page.fill("#user_email", USERNAME!);
     await page.fill("#user_password", PASSWORD!);
 
-    logger("INFO", "Clicking login button...");
-    await page.click('input[type="submit"][name="commit"][value="Log in"]'); // More specific selector
-
-    logger("INFO", "Waiting for navigation to dashboard/request space page...");
-    // Wait for either a common dashboard element or the "Request Space" page title
-    await page.waitForURL(/(\/dashboard|\/request_space)/, {
-      timeout: 30000,
-      waitUntil: "domcontentloaded",
-    });
-    // Further check for a specific element that indicates successful login
-    await page.waitForSelector(
-      'h1:has-text("Request Space"), h1:has-text("Dashboard"), a[href="/request_space"]',
-      { timeout: 10000 }
+    logger("INFO", "Locating login button (Sign In)...");
+    const loginButtonLocator = page.locator(
+      'input[type="submit"][value="Sign In"], button:has-text("Sign In")'
     );
 
-    logger("INFO", "Login successful.");
+    logger("INFO", "Waiting for login button to be visible...");
+    await loginButtonLocator.waitFor({ state: "visible", timeout: 20000 });
+
+    logger("INFO", "Scrolling login button into view...");
+    await loginButtonLocator.scrollIntoViewIfNeeded();
+
+    logger("INFO", "Clicking login button...");
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 45000 }),
+      loginButtonLocator.click({ timeout: 20000 }),
+    ]);
+    logger("INFO", "Login click initiated, navigation completed.");
+
+    // After login, we might be on a dashboard. We need to find and click the "Book Space" button.
+    if (
+      !page.url().includes("/request_space") &&
+      !page.url().includes("/request/new")
+    ) {
+      logger(
+        "INFO",
+        'Not on booking page URL. Looking for "Book Space" button/link...'
+      );
+
+      // More specific selector for the "Book Space" button based on its classes and icon
+      const bookSpaceButtonLocator = page.locator(
+        'a.btn.btn-primary.mr-3:has-text("Book Space"):has(i.fe-plus.mr-2)'
+      );
+      // We could also try: page.getByRole('link', { name: /Book Space/i }).filter({ has: page.locator('i.fe-plus.mr-2') });
+
+      logger(
+        "INFO",
+        `Attempting to find specific "Book Space" button with selector: ${bookSpaceButtonLocator.toString()}`
+      );
+
+      // Wait for this specific button to be visible and enabled
+      try {
+        await bookSpaceButtonLocator.waitFor({
+          state: "visible",
+          timeout: 20000,
+        });
+        logger(
+          "INFO",
+          '"Book Space" button (specific) found and is visible/enabled. Clicking it...'
+        );
+
+        await Promise.all([
+          page.waitForURL(/(\/request_space|\/request\/new)/, {
+            timeout: 30000,
+            waitUntil: "domcontentloaded",
+          }),
+          bookSpaceButtonLocator.click({ timeout: 15000 }),
+        ]);
+        logger(
+          "INFO",
+          'Clicked "Book Space" and waited for URL change to booking form.'
+        );
+      } catch (e: any) {
+        logger(
+          "WARNING",
+          `"Book Space" button (specific) not found or not interactable: ${e.message}. Will check for general booking form elements.`
+        );
+        // If the specific button click fails, we will fall through to the final verification.
+        // This might happen if we are already on the booking page due to a redirect.
+      }
+    } else {
+      logger("INFO", "Already on a URL that looks like the booking page.");
+    }
+
+    logger(
+      "INFO",
+      'Verifying presence of booking form elements (e.g., "Dates" label)...'
+    );
+    await page.waitForSelector(
+      'label:has-text("Dates"), label:has-text("Preferred Zone")',
+      { timeout: 20000 }
+    );
+
+    logger("INFO", "Successfully navigated to the booking page.");
     return true;
   } catch (error: any) {
-    logger("ERROR", `Login failed: ${error.message}`);
-    await page.screenshot({ path: "login_error.png", fullPage: true });
+    logger(
+      "ERROR",
+      `Login or navigation to booking page failed: ${error.message}`
+    );
+    await page.screenshot({
+      path: `login_or_nav_error_${Date.now()}.png`,
+      fullPage: true,
+    });
     return false;
   }
 }
@@ -139,81 +211,73 @@ async function bookParkingSpace(
   page: Page,
   parkingDateForForm: Date
 ): Promise<"booked" | "failed" | "no_spaces"> {
-  const formattedDateForInput = format(parkingDateForForm, "MM/dd/yyyy"); // Wayleadr form expects MM/DD/YYYY
+  const formattedDateForInput = format(parkingDateForForm, "MM/dd/yyyy");
   logger(
     "INFO",
     `Attempting to book parking for date: ${formattedDateForInput}`
   );
 
   try {
-    if (!page.url().includes("request_space")) {
-      logger("INFO", "Navigating to request space page...");
-      await page.goto("https://app.wayleadr.com/request_space", {
-        waitUntil: "networkidle",
-      });
-    } else {
-      // Ensure page is fully loaded if already on it
-      await page.waitForLoadState("networkidle");
-    }
+    await page.waitForLoadState("networkidle", { timeout: 10000 });
 
-    logger("INFO", 'Ensuring "Pre-Book Space" tab is selected...');
-    // The "Pre-Book Space" might be a link or a button-like element.
-    // It might already be selected by default.
+    logger(
+      "INFO",
+      'Ensuring "Pre-Book Space" tab is selected (if applicable)...'
+    );
     const preBookTabSelector =
       'a[role="tab"]:has-text("Pre-Book Space"), button[role="tab"]:has-text("Pre-Book Space")';
-    // Check if it's already active or click it.
     const preBookTab = page.locator(preBookTabSelector);
-    if (await preBookTab.isVisible()) {
-      // Check if it's the active tab (often has a specific class or aria-selected attribute)
-      const isActive = await preBookTab.evaluate(
+
+    if (
+      (await preBookTab.count()) > 0 &&
+      (await preBookTab.first().isVisible({ timeout: 5000 }))
+    ) {
+      const preBookTabElement = preBookTab.first();
+      const isActive = await preBookTabElement.evaluate(
         (node) =>
           node.classList.contains("active") ||
           node.getAttribute("aria-selected") === "true"
       );
       if (!isActive) {
         logger("INFO", 'Clicking "Pre-Book Space" tab.');
-        await preBookTab.click();
-        await page.waitForTimeout(1000); // Wait for tab content to potentially load
+        await preBookTabElement.click();
+        await page.waitForTimeout(1500);
       } else {
         logger("INFO", '"Pre-Book Space" tab is already active.');
       }
     } else {
       logger(
-        "WARNING",
-        '"Pre-Book Space" tab not found. Proceeding with current page state.'
+        "INFO",
+        '"Pre-Book Space" tab not found or not visible. Assuming form is ready.'
       );
     }
 
     logger("INFO", 'Selecting "Shared Spaces" zone...');
-    // The selector for the zone dropdown needs to be robust.
-    // This looks for a select element that is likely the first one for "Preferred Zone".
-    // Using a label to find the select is more robust.
     const zoneDropdown = page.locator(
       'label:has-text("Preferred Zone") ~ div select, label:has-text("Preferred Zone") + select'
     );
+    await zoneDropdown.waitFor({ state: "visible", timeout: 10000 });
     await zoneDropdown.selectOption({ label: "Shared Spaces" });
-    await page.waitForTimeout(500); // Small pause after selection
+    await page.waitForTimeout(500);
 
     logger("INFO", `Setting date to ${formattedDateForInput}...`);
-    // This selector looks for an input field associated with a "Dates" label.
     const dateInput = page.locator(
       'label:has-text("Dates") ~ div input[type="text"], label:has-text("Dates") + input[type="text"]'
     );
-    await dateInput.fill(""); // Clear existing date
+    await dateInput.waitFor({ state: "visible", timeout: 10000 });
+    await dateInput.fill("");
     await dateInput.fill(formattedDateForInput);
-    // Click outside to close date picker if any
     await page.locator("body").click();
     await page.waitForTimeout(500);
 
     logger("INFO", `Selecting vehicle: ${VEHICLE_ID}...`);
-    // This selector looks for a select field associated with a "Vehicle" label.
     const vehicleDropdown = page.locator(
       'label:has-text("Vehicle") ~ div select, label:has-text("Vehicle") + select'
     );
-    await vehicleDropdown.selectOption({ label: VEHICLE_ID! }); // Use non-null assertion if sure VEHICLE_ID is set
+    await vehicleDropdown.waitFor({ state: "visible", timeout: 10000 });
+    await vehicleDropdown.selectOption({ label: VEHICLE_ID! });
     await page.waitForTimeout(500);
 
-    // Check for "no available spaces" message BEFORE attempting to click "Request Space"
     const noSpacesMessageLocator = page.locator(
       'div:text-matches("There are no available spaces", "i"), p:text-matches("There are no available spaces", "i")'
     );
@@ -233,24 +297,29 @@ async function bookParkingSpace(
     const requestSpaceButton = page.locator(
       'button:has-text("Request Space"):not([disabled])'
     );
+    await requestSpaceButton.waitFor({ state: "visible", timeout: 10000 });
     await requestSpaceButton.scrollIntoViewIfNeeded();
     await requestSpaceButton.click();
 
-    // Wait for confirmation or error
-    // Look for a success message. This selector is a guess.
     const successAlertLocator = page.locator(
       'div[class*="alert-success"], div:has-text("Booking successful"), div:has-text("Request submitted")'
     );
-    // Look for a general error message if not a "no spaces" message
     const errorAlertLocator = page.locator(
       'div[class*="alert-danger"], div[class*="alert-error"], div:has-text("error")'
     );
 
     try {
-      await page.waitForSelector(
-        `${successAlertLocator.first().toString()}, ${errorAlertLocator
-          .first()
-          .toString()}, ${noSpacesMessageLocator.first().toString()}`,
+      await page.waitForFunction(
+        (selectors) => {
+          return selectors.some(
+            (selector) => !!document.querySelector(selector)
+          );
+        },
+        [
+          successAlertLocator.first().toString(),
+          errorAlertLocator.first().toString(),
+          noSpacesMessageLocator.first().toString(),
+        ],
         { timeout: 15000 }
       );
 
@@ -268,7 +337,6 @@ async function bookParkingSpace(
         (await noSpacesMessageLocator.count()) > 0 &&
         (await noSpacesMessageLocator.first().isVisible())
       ) {
-        // This case might have been caught before, but double check after click
         const messageText = await noSpacesMessageLocator.first().textContent();
         logger(
           "WARNING",
@@ -350,7 +418,7 @@ async function main(): Promise<void> {
 
   const allBookings = await loadBookings();
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Normalize to start of day
+  today.setHours(0, 0, 0, 0);
 
   const bookingsToAttempt: Date[] = [];
   for (const booking of allBookings) {
@@ -363,13 +431,12 @@ async function main(): Promise<void> {
         );
         continue;
       }
-      targetParkingDate.setHours(0, 0, 0, 0); // Normalize
+      targetParkingDate.setHours(0, 0, 0, 0);
 
-      // Booking should happen the day before the targetParkingDate at 00:00
       const dayToMakeBooking = addDays(targetParkingDate, -1);
 
       if (today.getTime() === dayToMakeBooking.getTime()) {
-        bookingsToAttempt.push(targetParkingDate); // Store the actual date we want to park
+        bookingsToAttempt.push(targetParkingDate);
       }
     }
   }
@@ -389,12 +456,13 @@ async function main(): Promise<void> {
   );
 
   const browser: Browser = await chromium.launch({
-    headless: process.env.NODE_ENV === "production", // Headless in production (GitHub Actions)
+    headless: process.env.NODE_ENV === "production",
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
     ],
+    // slowMo: 100 // Uncomment for local debugging to see actions slowly
   });
 
   try {
@@ -408,7 +476,7 @@ async function main(): Promise<void> {
 
     if (await loginToWayleadr(page)) {
       for (const dateToBook of bookingsToAttempt) {
-        const result = await bookParkingSpace(page, dateToBook); // Pass the actual parking date
+        const result = await bookParkingSpace(page, dateToBook);
         await updateBookingStatus(
           dateToBook,
           result,
@@ -422,12 +490,11 @@ async function main(): Promise<void> {
               "yyyy-MM-dd"
             )}.`
           );
-          await page.waitForTimeout(2000); // Small pause if multiple bookings and one fails
+          await page.waitForTimeout(2000);
         }
       }
     } else {
       logger("ERROR", "Login failed. No bookings will be attempted.");
-      // Update status for all bookings that were meant for today if login fails
       for (const dateToBook of bookingsToAttempt) {
         await updateBookingStatus(
           dateToBook,
@@ -441,7 +508,6 @@ async function main(): Promise<void> {
       "ERROR",
       `An unhandled error occurred in main execution: ${error.message}`
     );
-    // Potentially update all pending bookings for today to 'failed'
     for (const dateToBook of bookingsToAttempt) {
       await updateBookingStatus(
         dateToBook,
