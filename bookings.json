@@ -1,9 +1,8 @@
 [
   {
     "parking_date": "2025-05-09",
-    "status": "failed",
+    "status": "pending",
     "created_at": "2025-05-08T10:00:00.000Z",
-    "last_attempt": "2025-05-08T16:18:51.631Z",
-    "attempt_message": "Attempted on 2025-05-08T16:18:51.631Z"
+    "last_attempt": "2025-05-08T16:39:26.579Z"
   }
 ]
