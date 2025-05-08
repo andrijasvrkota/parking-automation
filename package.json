@@ -1,0 +1,35 @@
+{
+  "name": "wayleadr-parking-automation-ts",
+  "version": "1.1.0",
+  "description": "Automated parking space reservation for Wayleadr using Playwright and TypeScript",
+  "main": "dist/parking-booking.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node dist/parking-booking.js",
+    "book": "npm run start",
+    "add": "npm run build && node dist/add-booking.js",
+    "lint": "eslint . --ext .ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "wayleadr",
+    "parking",
+    "automation",
+    "playwright",
+    "typescript"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "date-fns": "2.30.0",
+    "playwright": "1.40.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.10.0",
+    "@types/date-fns": "2.6.0",
+    "typescript": "5.3.2",
+    "@typescript-eslint/eslint-plugin": "6.13.1",
+    "@typescript-eslint/parser": "6.13.1",
+    "eslint": "8.54.0"
+  }
+}
