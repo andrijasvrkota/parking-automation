@@ -1,5 +1,5 @@
 import { chromium, Locator, Page } from "playwright";
-import { format, addDays, isValid as isValidDate } from "date-fns";
+import { addDays, isValid as isValidDate } from "date-fns";
 import { log, loadBookings, saveBookings, BookingStatus, getFormattedDate, parseDate, getDay } from "./util";
 
 const USERNAME = process.env.WAYLEADR_USERNAME;
@@ -97,33 +97,15 @@ async function loginToWayleadr(page: Page): Promise<boolean> {
       page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 45000 }),
       loginButtonLocator.click({ timeout: 20000 }),
     ]);
-    log("INFO", `Current URL after login attempt: ${page.url()}`);
-
-    if (
-      !page.url().includes("/request_space") &&
-      !page.url().includes("/request/new") &&
-      !page.url().includes("/dashboard")
-    ) {
-        log("INFO", 'Not on booking page, attempting to click "Book Space" link/button...');
-        const bookSpaceButtonLocator = page.locator(S.bookSpaceButton);
-        try {
-            await bookSpaceButtonLocator.waitFor({ state: "visible", timeout: 20000 });
-            log("INFO", 'Found "Book Space" button, clicking...');
-            await Promise.all([
-            page.waitForURL(/(\/request_space|\/request\/new)/, {
-                timeout: 30000,
-                waitUntil: "domcontentloaded",
-            }),
-            bookSpaceButtonLocator.click({ timeout: 15000 }),
-            ]);
-            log("INFO", 'Navigated to booking form via "Book Space" button.');
-        } catch (e: any) {
-            log("WARNING", `"Book Space" button not found or failed to navigate: ${e.message}. Checking for booking form elements directly.`);
-        }
-    }
+    log("INFO", 'Not on booking page, attempting to click "Book Space" link/button...');
+    const bookSpaceButtonLocator = page.locator(S.bookSpaceButton);
+    clickWhenReady(bookSpaceButtonLocator);
+    await page.waitForURL(/\/request\/new/);
+    log("INFO", 'Navigated to booking form via "Book Space" button.');
 
     await page.waitForSelector(S.postLoginBookingPageIndicator, { timeout: 30000 });
-    log("INFO", "Successfully navigated to the booking page or a page with booking elements.");
+    log("INFO", "Booking page is rendered.");
+
     return true;
   } catch (error: any) {
     log("ERROR", `Login or navigation to booking page failed: ${error.message}`);
@@ -159,9 +141,8 @@ async function bookParkingSpace(page: Page, date: Date): Promise<BookingStatus> 
     }
 
     const submitButton = page.locator(S.submitButton);
-    await submitButton.waitFor({ state: "visible", timeout: 15000 });
     log("INFO", "Submitting booking request...");
-    await submitButton.click({ timeout: 30000 });
+    clickWhenReady(submitButton, 20000);
     await page.waitForFunction(
       (selectors) => selectors.some((selector) => !!document.querySelector(selector)),
       [
@@ -188,93 +169,56 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const allBookings = await loadBookings();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const bookingsToAttempt: Date[] = [];
-  for (const booking of allBookings) {
-    if (booking.status === "pending") {
-      const targetParkingDate = parseDate(booking.parking_date);
-      if (!isValidDate(targetParkingDate)) {
-        log("WARNING", `Invalid date in bookings.json: ${booking.parking_date}. Skipping.`);
-        continue;
-      }
-      targetParkingDate.setHours(0, 0, 0, 0);
+  // Pick the one booking scheduled for tomorrow
+  const nextBookingDate = (await loadBookings())
+    .filter(b => b.status === "pending")
+    .map(b => parseDate(b.parking_date))
+    .filter(isValidDate)
+    .find(d => addDays(d, -1).setHours(0, 0, 0, 0) === today.getTime());
 
-      const dayToMakeBooking = addDays(targetParkingDate, -1);
-      dayToMakeBooking.setHours(0,0,0,0);
-
-      if (today.getTime() === dayToMakeBooking.getTime()) {
-        bookingsToAttempt.push(targetParkingDate);
-      }
-    }
-  }
-
-  if (bookingsToAttempt.length === 0) {
-    log("INFO", "No pending bookings scheduled for execution today.");
+  if (!nextBookingDate) {
+    log("INFO", "No pending booking for execution today.");
     return;
   }
 
-  log("INFO", `Found ${bookingsToAttempt.length} booking(s) to attempt: ${bookingsToAttempt.map((d) => getFormattedDate(d)).join(", ")}`);
+  const dateStr = getFormattedDate(nextBookingDate);
+  log("INFO", `Attempting booking for ${dateStr}`);
 
   const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-extensions",
-    ],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-extensions"],
   });
-
   const context = await browser.newContext({
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",
     viewport: { width: 1280, height: 800 },
     locale: "en-US",
   });
-
   const page = await context.newPage();
 
-  try {
-    if (await loginToWayleadr(page)) {
-      for (const dateToBook of bookingsToAttempt) {
-        const result = await bookParkingSpace(page, dateToBook);
-        await updateBookingStatus(
-          dateToBook,
-          result,
-          `Attempted on ${getFormattedDate(new Date())}. Result: ${result}`
-        );
-
-        if (result !== "booked") {
-          log("INFO", `Pausing briefly after non-successful attempt for ${getFormattedDate(dateToBook)}.`);
-          await page.waitForTimeout(2000 + Math.random() * 1000);
-        }
-      }
-    } else {
-      log("ERROR", "Login failed. No bookings will be attempted for today's scheduled dates.");
-      for (const dateToBook of bookingsToAttempt) {
-        await updateBookingStatus(
-          dateToBook,
-          "failed",
-          `Login failed on ${getFormattedDate(new Date())}. Booking not attempted.`
-        );
-      }
-    }
-  } catch (error: any) {
-    log("ERROR", `Unhandled error in main execution: ${error.message}`);
-    for (const dateToBook of bookingsToAttempt) {
-      await updateBookingStatus(dateToBook, "failed", `Unhandled script error: ${error.message}`);
-    }
-  } finally {
-    log("INFO", "Closing browser.");
-    if (browser.isConnected()) {
-        await context.close();
-        await browser.close();
-    }
+  const loginSuccess = await loginToWayleadr(page);
+  if (!loginSuccess) {
+    log("ERROR", "Login failed. Booking will be marked failed.");
   }
+
+  let result: BookingStatus = "failed";
+  if (loginSuccess) {
+    result = await bookParkingSpace(page, nextBookingDate);
+  }
+
+  const message = loginSuccess
+    ? `Attempted on ${getFormattedDate(new Date())}. Result: ${result}`
+    : `Login failed on ${getFormattedDate(new Date())}. Booking not attempted.`;
+  await updateBookingStatus(nextBookingDate, result, message);
+
+  log("INFO", "Closing browser.");
+  await context.close();
+  await browser.close();
 }
 
-main().catch((error) => {
-  log("ERROR", `Unhandled error at top level: ${error.message} \n ${error.stack}`);
+main().catch(error => {
+  log("ERROR", `Unhandled error: ${error.message}`);
   process.exit(1);
 });

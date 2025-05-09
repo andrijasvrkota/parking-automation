@@ -44,14 +44,6 @@ export async function saveBookings(bookings: Booking[]): Promise<boolean> {
   }
 }
 
-export function getFormattedDate(date: Date) : string {
-  return format(date, TARGET_DATE_FORMAT);
-}
-
-export function parseDate(dateStr: string) : Date {
-  return parse(dateStr, TARGET_DATE_FORMAT, new Date());
-}
-
-export function getDay(date: Date): string {
-  return format(date, "d");
-}
+export function getFormattedDate(date: Date) : string { return format(date, TARGET_DATE_FORMAT); }
+export function parseDate(dateStr: string) : Date { return parse(dateStr, TARGET_DATE_FORMAT, new Date()); }
+export function getDay(date: Date): string { return format(date, "d"); }
