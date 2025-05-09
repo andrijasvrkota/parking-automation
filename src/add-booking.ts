@@ -1,95 +1,37 @@
-import * as fs from "fs/promises";
-import * as path from "path";
-import { parse, parseISO, isValid as isValidDate, format } from "date-fns";
-import { Booking, TARGET_DATE_FORMAT, log } from "./util";
+import { isValid as isValidDate } from "date-fns";
+import { getFormattedDate, loadBookings, log, parseDate, saveBookings } from "./util";
 
-const BOOKINGS_FILE = path.join(__dirname, "..", "bookings.json");
-
-async function loadBookings(): Promise<Booking[]> {
-  try {
-    const data = await fs.readFile(BOOKINGS_FILE, "utf8");
-    return JSON.parse(data) as Booking[];
-  } catch (error: any) {
-    if (error.code === "ENOENT") {
-      return [];
-    }
-    log("ERROR", `Error loading bookings: ${error.message}`);
-    return [];
-  }
-}
-
-async function saveBookings(bookings: Booking[]): Promise<boolean> {
-  try {
-    await fs.writeFile(BOOKINGS_FILE, JSON.stringify(bookings, null, 2));
-    log("INFO", `Bookings saved to ${BOOKINGS_FILE}`);
-    return true;
-  } catch (error: any) {
-    log("ERROR", `Error saving bookings: ${error.message}`);
-    return false;
-  }
-}
+const RESET_STATUSES = ["failed", "no_spaces"];
 
 async function addBookingEntry(dateStr: string): Promise<boolean> {
-  try {
-    const parkingDate = parse(dateStr, TARGET_DATE_FORMAT, new Date());
-    if (!isValidDate(parkingDate) || format(parkingDate, TARGET_DATE_FORMAT) !== dateStr) {
-      log("ERROR", `Invalid date format: "${dateStr}". Please use DD-MM-YYYY format (e.g., 31-12-2025).`);
-      return false;
-    }
-
-    const bookings = await loadBookings();
-    const existingBooking = bookings.find((b) => b.parking_date === dateStr);
-
-    if (existingBooking) {
-      log("WARNING", `Booking for ${dateStr} already exists with status: ${existingBooking.status}.`);
-      if (
-        existingBooking.status === "failed" ||
-        existingBooking.status === "no_spaces"
-      ) {
-        existingBooking.status = "pending";
-        existingBooking.last_attempt = undefined;
-        existingBooking.attempt_message = "Re-added by user";
-        log("INFO", `Status for ${dateStr} reset to 'pending'.`);
-      } else {
-        return false;
-      }
-    } else {
-      const newBooking: Booking = {
-        parking_date: dateStr,
-        status: "pending",
-        created_at: new Date().toISOString(),
-        last_attempt: undefined,
-      };
-      bookings.push(newBooking);
-      log("INFO", `Added new booking for ${dateStr}`);
-    }
-
-    bookings.sort(
-      (a, b) =>
-        new Date(a.parking_date).getTime() - new Date(b.parking_date).getTime()
-    );
-
-    return await saveBookings(bookings);
-  } catch (error: any) {
-    log("ERROR", `Error adding booking for ${dateStr}: ${error.message}`);
+  const date = parseDate(dateStr);
+  if (!isValidDate(date) || getFormattedDate(date) !== dateStr) {
+    log("ERROR", `Invalid date: ${dateStr}. Use DD-MM-YYYY.`);
     return false;
   }
-}
 
-async function mainCli(): Promise<void> {
-  const args = process.argv.slice(2);
+  const bookings = await loadBookings();
+  const existing = bookings.find(b => b.parking_date === dateStr);
 
-  const addIndex = args.indexOf("--add");
-  if (addIndex !== -1 && addIndex + 1 < args.length) {
-    const dateStr = args[addIndex + 1];
-    await addBookingEntry(dateStr);
-    return;
+  if (existing) {
+    if (!RESET_STATUSES.includes(existing.status)) return false;
+    Object.assign(existing, { status: "pending", last_attempt: undefined, attempt_message: "Re-added" });
+    log("INFO", `Reset ${dateStr} to pending.`);
+  } else {
+    bookings.push({ parking_date: dateStr, status: "pending", created_at: getFormattedDate(new Date()), last_attempt: undefined });
+    log("INFO", `Added booking ${dateStr}.`);
   }
 
-  log("ERROR", "Invalid arguments.");
+  bookings.sort((a, b) => new Date(a.parking_date).getTime() - new Date(b.parking_date).getTime());
+  return saveBookings(bookings);
 }
 
-mainCli().catch((error) => {
-  log("ERROR", `Unhandled error in add-booking CLI: ${error.message}`);
+(async () => {
+  const [,, flag, date] = process.argv;
+  if (flag === "--add" && date) {
+    const success = await addBookingEntry(date);
+    process.exit(success ? 0 : 1);
+  }
+  log("ERROR", "Usage: npm run add-booking -- --add <DD-MM-YYYY>");
   process.exit(1);
-});
+})();
