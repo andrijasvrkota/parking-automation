@@ -2,28 +2,17 @@ import { chromium, Browser, Page } from "playwright";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { format, addDays, parseISO, isValid as isValidDate } from "date-fns";
+import { Booking, TARGET_DATE_FORMAT } from "./types";
 
-// --- Configuration ---
 const BOOKINGS_FILE = path.join(__dirname, "..", "bookings.json");
 const USERNAME = process.env.WAYLEADR_USERNAME;
 const PASSWORD = process.env.WAYLEADR_PASSWORD;
 
-// --- Interfaces ---
-interface Booking {
-  parking_date: string; //<y_bin_46>-MM-DD
-  status: "pending" | "booked" | "failed" | "no_spaces";
-  created_at: string; // ISO Date string
-  last_attempt: string | null; // ISO Date string
-  attempt_message?: string;
-}
-
-// --- Logging ---
 function logger(level: "INFO" | "ERROR" | "WARNING", message: string): void {
   const timestamp = new Date().toISOString();
   console.log(`${timestamp} - ${level}: ${message}`);
 }
 
-// --- File Operations ---
 async function loadBookings(): Promise<Booking[]> {
   try {
     const data = await fs.readFile(BOOKINGS_FILE, "utf8");
@@ -57,7 +46,7 @@ async function updateBookingStatus(
   message?: string
 ): Promise<void> {
   const bookings = await loadBookings();
-  const dateStrToUpdate = format(parkingDateToUpdate, "yyyy-MM-dd");
+  const dateStrToUpdate = format(parkingDateToUpdate, TARGET_DATE_FORMAT);
 
   let found = false;
   for (const booking of bookings) {
@@ -92,7 +81,6 @@ async function updateBookingStatus(
   await saveBookings(filteredBookings);
 }
 
-// --- Playwright Actions ---
 async function loginToWayleadr(page: Page): Promise<boolean> {
   try {
     logger("INFO", "Navigating to Wayleadr login page...");
@@ -204,13 +192,13 @@ async function bookParkingSpace(
   parkingDateForForm: Date
 ): Promise<"booked" | "failed" | "no_spaces"> {
   const dayToSelect = format(parkingDateForForm, "d");
-  const fullDateForLog = format(parkingDateForForm, "yyyy-MM-dd");
+  const fullDateForLog = format(parkingDateForForm, TARGET_DATE_FORMAT);
 
   logger("INFO", `Attempting to book parking for date: ${fullDateForLog}`);
   logger("INFO", `Will select day: ${dayToSelect} in the calendar.`);
 
   try {
-    await page.waitForTimeout(1000); // Increased initial pause slightly after navigation
+    await page.waitForTimeout(1000);
 
     logger(
       "INFO",
@@ -245,7 +233,6 @@ async function bookParkingSpace(
       );
     }
 
-    // --- Date Selection Logic ---
     logger("INFO", 'Clicking the "Dates" input field to open calendar...');
     const dateInputActivator = page.locator(
       "input#booking_request_date_range.hasDatepicker"
@@ -282,10 +269,7 @@ async function bookParkingSpace(
 
     await page.waitForTimeout(1000);
     logger("INFO", `Date ${fullDateForLog} should now be selected.`);
-    // --- End of Date Selection Logic ---
 
-    // Check for "no available spaces" message BEFORE attempting to click "Request Space"
-    // This might appear after date selection if the selected date has no spots.
     const noSpacesMessageLocator = page.locator(
       'div:text-matches("There are no available spaces", "i"), p:text-matches("There are no available spaces", "i")'
     );
@@ -293,7 +277,6 @@ async function bookParkingSpace(
       (await noSpacesMessageLocator.count()) > 0 &&
       (await noSpacesMessageLocator.first().isVisible({ timeout: 3000 }))
     ) {
-      // Quick check
       const messageText = await noSpacesMessageLocator.first().textContent();
       logger(
         "WARNING",
@@ -309,13 +292,13 @@ async function bookParkingSpace(
       "INFO",
       'Locating "Request Space" button (input#form-submit-button)...'
     );
-    // Use the specific ID and tag for the submit button
+
     const requestSpaceButton = page.locator(
       'input#form-submit-button[value="Request Space"]'
     );
 
     logger("INFO", 'Waiting for "Request Space" button to be visible...');
-    await requestSpaceButton.waitFor({ state: "visible", timeout: 15000 }); // Wait for it to be visible
+    await requestSpaceButton.waitFor({ state: "visible", timeout: 15000 });
 
     logger("INFO", 'Scrolling "Request Space" button into view...');
     await requestSpaceButton.scrollIntoViewIfNeeded();
@@ -324,8 +307,7 @@ async function bookParkingSpace(
       "INFO",
       'Clicking "Request Space" button (will wait for enabled)...'
     );
-    // Playwright's click action automatically waits for the element to be enabled.
-    // Give it a generous timeout for this enabling process.
+
     await requestSpaceButton.click({ timeout: 30000 });
 
     const successAlertLocator = page.locator(
@@ -418,7 +400,6 @@ async function bookParkingSpace(
   }
 }
 
-// --- Main Logic ---
 async function main(): Promise<void> {
   if (!USERNAME || !PASSWORD) {
     logger(
@@ -463,7 +444,7 @@ async function main(): Promise<void> {
     `Found ${
       bookingsToAttempt.length
     } booking(s) to attempt today: ${bookingsToAttempt
-      .map((d) => format(d, "yyyy-MM-dd"))
+      .map((d) => format(d, TARGET_DATE_FORMAT))
       .join(", ")}`
   );
 
@@ -474,7 +455,6 @@ async function main(): Promise<void> {
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
     ],
-    // slowMo: 250 // Uncomment for local debugging to see actions slowly
   });
 
   try {
@@ -499,7 +479,7 @@ async function main(): Promise<void> {
             "INFO",
             `Pausing for a moment after a non-successful booking attempt for ${format(
               dateToBook,
-              "yyyy-MM-dd"
+              TARGET_DATE_FORMAT
             )}.`
           );
           await page.waitForTimeout(2000);
