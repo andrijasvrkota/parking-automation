@@ -171,7 +171,7 @@ async function main(): Promise<void> {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
+  console.log("today", today);
   // Pick the one booking scheduled for tomorrow
   const nextBookingDate = (await loadBookings())
     .filter(b => b.status === "pending")
