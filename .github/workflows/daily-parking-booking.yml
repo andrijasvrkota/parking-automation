@@ -10,7 +10,7 @@ env:
 
 jobs:
   attempt_parking_booking:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions:
       contents: write
 
