@@ -28,10 +28,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Playwright browser
-        uses: microsoft/playwright-github-action@v1
-        with:
-          browsers: chromium
+      - name: Install Playwright Browsers
+        run: |
+          sudo apt-get update -y
+          npx playwright install --with-deps chromium
 
       - name: Build TypeScript
         run: npm run build 
