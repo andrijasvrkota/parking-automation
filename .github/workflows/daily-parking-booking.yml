@@ -29,9 +29,7 @@ jobs:
         run: npm install
 
       - name: Install Playwright Browsers
-        run: |
-          sudo apt-get update -y
-          npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Build TypeScript
         run: npm run build 

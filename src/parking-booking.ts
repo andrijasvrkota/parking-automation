@@ -170,7 +170,6 @@ async function main(): Promise<void> {
   }
 
   const today = new Date();
-  console.log("today", today);
   today.setHours(0, 0, 0, 0);
   // Pick the one booking scheduled for tomorrow
   const nextBookingDate = (await loadBookings())
