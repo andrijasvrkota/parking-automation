@@ -51,3 +51,7 @@ export function getFormattedDate(date: Date) : string {
 export function parseDate(dateStr: string) : Date {
   return parse(dateStr, TARGET_DATE_FORMAT, new Date());
 }
+
+export function getDay(date: Date): string {
+  return format(date, "d");
+}
