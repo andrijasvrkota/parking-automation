@@ -58,7 +58,7 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
         existingBooking.attempt_message = "Re-added by user";
         console.log(`Status for ${dateStr} reset to 'pending'.`);
       } else {
-        return false; // Don't modify if 'booked' or already 'pending'
+        return false;
       }
     } else {
       const newBooking: Booking = {
@@ -84,7 +84,7 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
 }
 
 async function mainCli(): Promise<void> {
-  const args = process.argv.slice(2); // Skip 'node' and script path
+  const args = process.argv.slice(2);
 
   const addIndex = args.indexOf("--add");
   if (addIndex !== -1 && addIndex + 1 < args.length) {

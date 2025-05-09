@@ -1,15 +1,15 @@
 import { chromium, Browser, Page } from "playwright";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { format, addDays, parseISO, isValid as isValidDate } from "date-fns";
+import { format, addDays, parse, isValid as isValidDate } from "date-fns"; // Removed isBefore as it wasn't used in the simplified filter
 import { Booking, TARGET_DATE_FORMAT } from "./types";
 
 const BOOKINGS_FILE = path.join(__dirname, "..", "bookings.json");
 const USERNAME = process.env.WAYLEADR_USERNAME;
 const PASSWORD = process.env.WAYLEADR_PASSWORD;
 
-function logger(level: "INFO" | "ERROR" | "WARNING", message: string): void {
-  const timestamp = new Date().toISOString();
+function log(level: "INFO" | "ERROR" | "WARNING", message: string): void {
+  const timestamp = format(new Date(), TARGET_DATE_FORMAT);
   console.log(`${timestamp} - ${level}: ${message}`);
 }
 
@@ -20,13 +20,10 @@ async function loadBookings(): Promise<Booking[]> {
     return bookings.filter((b) => b.parking_date && b.status && b.created_at);
   } catch (error: any) {
     if (error.code === "ENOENT") {
-      logger(
-        "INFO",
-        `Bookings file not found at ${BOOKINGS_FILE}. Returning empty array.`
-      );
+      log("INFO", `Bookings file not found at ${BOOKINGS_FILE}. Returning empty array.`);
       return [];
     }
-    logger("ERROR", `Failed to load bookings: ${error.message}`);
+    log("ERROR", `Failed to load bookings: ${error.message}`);
     return [];
   }
 }
@@ -34,25 +31,24 @@ async function loadBookings(): Promise<Booking[]> {
 async function saveBookings(bookings: Booking[]): Promise<void> {
   try {
     await fs.writeFile(BOOKINGS_FILE, JSON.stringify(bookings, null, 2));
-    logger("INFO", `Bookings saved to ${BOOKINGS_FILE}`);
   } catch (error: any) {
-    logger("ERROR", `Failed to save bookings: ${error.message}`);
+    log("ERROR", `Failed to save bookings: ${error.message}`);
   }
 }
 
 async function updateBookingStatus(
-  parkingDateToUpdate: Date,
+  date: Date,
   outcome: "booked" | "failed" | "no_spaces",
   message?: string
 ): Promise<void> {
   const bookings = await loadBookings();
-  const dateStrToUpdate = format(parkingDateToUpdate, TARGET_DATE_FORMAT);
+  const dateStrToUpdate = format(date, TARGET_DATE_FORMAT);
 
   let found = false;
   for (const booking of bookings) {
     if (booking.parking_date === dateStrToUpdate) {
       booking.status = outcome;
-      booking.last_attempt = new Date().toISOString();
+      booking.last_attempt = format(new Date(), TARGET_DATE_FORMAT)
       if (message) {
         booking.attempt_message = message;
       }
@@ -61,20 +57,36 @@ async function updateBookingStatus(
     }
   }
   if (!found) {
-    logger(
-      "WARNING",
-      `Could not find booking for date ${dateStrToUpdate} to update status.`
-    );
+    log("WARNING", `Could not find booking for date ${dateStrToUpdate} to update status.`);
   }
 
   const sevenDaysAgo = addDays(new Date(), -7);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const filteredBookings = bookings.filter((b) => {
-    const bookingDateObj = parseISO(b.parking_date);
-    if (!isValidDate(bookingDateObj)) return false;
+    const bookingDateObj = parse(
+      b.parking_date,
+      TARGET_DATE_FORMAT,
+      new Date()
+    );
+    if (!isValidDate(bookingDateObj)) {
+      return false;
+    }
+
+    const isRecent = bookingDateObj >= sevenDaysAgo;
+    const isPending = b.status === "pending";
+    const isFutureNoSpaces = b.status === "no_spaces" && bookingDateObj >= today;
+    const isRelevantBooked = b.status === "booked" && bookingDateObj >= sevenDaysAgo;
+
     return (
-      bookingDateObj >= sevenDaysAgo ||
-      b.status === "pending" ||
-      (b.status === "no_spaces" && bookingDateObj >= new Date())
+      isPending ||
+      isFutureNoSpaces ||
+      isRelevantBooked ||
+      (isRecent &&
+        b.status !== "pending" &&
+        b.status !== "no_spaces" &&
+        b.status !== "booked")
     );
   });
 
@@ -83,65 +95,41 @@ async function updateBookingStatus(
 
 async function loginToWayleadr(page: Page): Promise<boolean> {
   try {
-    logger("INFO", "Navigating to Wayleadr login page...");
+    log("INFO", "Navigating to Wayleadr login page...");
     await page.goto("https://app.wayleadr.com/users/sign_in", {
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
 
-    logger("INFO", "Waiting for login form elements...");
     await page.waitForSelector("#user_email", { timeout: 30000 });
-    await page.waitForSelector("#user_password", { timeout: 10000 });
-
-    logger("INFO", "Entering login credentials...");
     await page.fill("#user_email", USERNAME!);
     await page.fill("#user_password", PASSWORD!);
 
-    logger("INFO", "Locating login button (Sign In)...");
     const loginButtonLocator = page.locator(
       'input[type="submit"][value="Sign In"], button:has-text("Sign In")'
     );
-
-    logger("INFO", "Waiting for login button to be visible...");
     await loginButtonLocator.waitFor({ state: "visible", timeout: 20000 });
-
-    logger("INFO", "Scrolling login button into view...");
-    await loginButtonLocator.scrollIntoViewIfNeeded();
-
-    logger("INFO", "Clicking login button...");
     await Promise.all([
       page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 45000 }),
       loginButtonLocator.click({ timeout: 20000 }),
     ]);
-    logger("INFO", "Login click initiated, navigation completed.");
 
     if (
       !page.url().includes("/request_space") &&
       !page.url().includes("/request/new")
     ) {
-      logger(
+      log(
         "INFO",
-        'Not on booking page URL. Looking for "Book Space" button/link...'
+        'Not on booking page, attempting to click "Book Space" link/button...'
       );
-
       const bookSpaceButtonLocator = page.locator(
         'a.btn.btn-primary.mr-3:has-text("Book Space"):has(i.fe-plus.mr-2)'
-      );
-
-      logger(
-        "INFO",
-        `Attempting to find specific "Book Space" button with selector: ${bookSpaceButtonLocator.toString()}`
       );
       try {
         await bookSpaceButtonLocator.waitFor({
           state: "visible",
           timeout: 20000,
         });
-        logger(
-          "INFO",
-          '"Book Space" button (specific) found and is visible. Clicking it...'
-        );
-
         await Promise.all([
           page.waitForURL(/(\/request_space|\/request\/new)/, {
             timeout: 30000,
@@ -149,70 +137,43 @@ async function loginToWayleadr(page: Page): Promise<boolean> {
           }),
           bookSpaceButtonLocator.click({ timeout: 15000 }),
         ]);
-        logger(
-          "INFO",
-          'Clicked "Book Space" and waited for URL change to booking form.'
-        );
+        log("INFO", 'Navigated to booking form via "Book Space" button.');
       } catch (e: any) {
-        logger(
+        log(
           "WARNING",
-          `"Book Space" button (specific) not found or not interactable: ${e.message}. Will check for general booking form elements.`
+          `"Book Space" button not found or failed to navigate: ${e.message}. Proceeding.`
         );
       }
-    } else {
-      logger("INFO", "Already on a URL that looks like the booking page.");
     }
 
-    logger(
-      "INFO",
-      'Verifying presence of booking form elements (e.g., "Dates" label)...'
-    );
     await page.waitForSelector(
       'label:has-text("Dates"), label:has-text("Preferred Zone")',
       { timeout: 20000 }
     );
-
-    logger("INFO", "Successfully navigated to the booking page.");
+    log("INFO", "Successfully navigated to the booking page.");
     return true;
   } catch (error: any) {
-    logger(
-      "ERROR",
-      `Login or navigation to booking page failed: ${error.message}`
-    );
-    await page.screenshot({
-      path: `login_or_nav_error_${Date.now()}.png`,
-      fullPage: true,
-    });
+    log("ERROR", `Login or navigation to booking page failed: ${error.message}`);
     return false;
   }
 }
 
-async function bookParkingSpace(
-  page: Page,
-  parkingDateForForm: Date
-): Promise<"booked" | "failed" | "no_spaces"> {
+async function bookParkingSpace(page: Page, parkingDateForForm: Date): Promise<"booked" | "failed" | "no_spaces"> {
   const dayToSelect = format(parkingDateForForm, "d");
   const fullDateForLog = format(parkingDateForForm, TARGET_DATE_FORMAT);
 
-  logger("INFO", `Attempting to book parking for date: ${fullDateForLog}`);
-  logger("INFO", `Will select day: ${dayToSelect} in the calendar.`);
+  log("INFO", `Attempting to book parking for: ${fullDateForLog}`);
 
   try {
     await page.waitForTimeout(1000);
 
-    logger(
-      "INFO",
-      'Ensuring "Pre-Book Space" tab is selected (if applicable)...'
-    );
     const preBookTabSelector =
       'a[role="tab"]:has-text("Pre-Book Space"), button[role="tab"]:has-text("Pre-Book Space")';
     const preBookTab = page.locator(preBookTabSelector);
-
     if (
       (await preBookTab.count()) > 0 &&
       (await preBookTab.first().isVisible({ timeout: 7000 }))
     ) {
-      // Increased timeout
       const preBookTabElement = preBookTab.first();
       const isActive = await preBookTabElement.evaluate(
         (node) =>
@@ -220,55 +181,34 @@ async function bookParkingSpace(
           node.getAttribute("aria-selected") === "true"
       );
       if (!isActive) {
-        logger("INFO", 'Clicking "Pre-Book Space" tab.');
         await preBookTabElement.click();
         await page.waitForTimeout(1500);
-      } else {
-        logger("INFO", '"Pre-Book Space" tab is already active.');
       }
-    } else {
-      logger(
-        "INFO",
-        '"Pre-Book Space" tab not found or not visible. Assuming form is ready.'
-      );
     }
 
-    logger("INFO", 'Clicking the "Dates" input field to open calendar...');
     const dateInputActivator = page.locator(
       "input#booking_request_date_range.hasDatepicker"
     );
     await dateInputActivator.waitFor({ state: "visible", timeout: 10000 });
     await dateInputActivator.scrollIntoViewIfNeeded();
-    await dateInputActivator.click({ force: true, timeout: 7000 }); // Increased timeout
+    await dateInputActivator.click({ force: true, timeout: 7000 });
 
-    logger("INFO", "Waiting for calendar to become visible...");
     const calendarContainerLocator = page.locator("div#ui-datepicker-div");
     await calendarContainerLocator.waitFor({
       state: "visible",
       timeout: 15000,
     });
-    logger("INFO", "Calendar container (ui-datepicker-div) is visible.");
-
     const calendarTableLocator = calendarContainerLocator.locator(
       "table.ui-datepicker-calendar"
     );
     await calendarTableLocator.waitFor({ state: "visible", timeout: 5000 });
-    logger("INFO", "Calendar table (ui-datepicker-calendar) is visible.");
 
-    logger(
-      "INFO",
-      `Attempting to select day "${dayToSelect}" in the calendar...`
-    );
     const dayCellLinkLocator = calendarTableLocator.locator(
       `td:not(.ui-datepicker-unselectable):not(.ui-state-disabled) a.ui-state-default[data-date="${dayToSelect}"]`
     );
-
     await dayCellLinkLocator.waitFor({ state: "visible", timeout: 10000 });
-    logger("INFO", `Day cell link for "${dayToSelect}" found. Clicking it.`);
     await dayCellLinkLocator.click();
-
     await page.waitForTimeout(1000);
-    logger("INFO", `Date ${fullDateForLog} should now be selected.`);
 
     const noSpacesMessageLocator = page.locator(
       'div:text-matches("There are no available spaces", "i"), p:text-matches("There are no available spaces", "i")'
@@ -278,36 +218,17 @@ async function bookParkingSpace(
       (await noSpacesMessageLocator.first().isVisible({ timeout: 3000 }))
     ) {
       const messageText = await noSpacesMessageLocator.first().textContent();
-      logger(
+      log(
         "WARNING",
-        `No spaces available message detected before final submit: ${messageText?.trim()}`
+        `No spaces available for ${fullDateForLog} (pre-submit check): ${messageText?.trim()}`
       );
-      await page.screenshot({
-        path: `no_spaces_before_submit_${fullDateForLog}.png`,
-      });
       return "no_spaces";
     }
-
-    logger(
-      "INFO",
-      'Locating "Request Space" button (input#form-submit-button)...'
-    );
 
     const requestSpaceButton = page.locator(
       'input#form-submit-button[value="Request Space"]'
     );
-
-    logger("INFO", 'Waiting for "Request Space" button to be visible...');
     await requestSpaceButton.waitFor({ state: "visible", timeout: 15000 });
-
-    logger("INFO", 'Scrolling "Request Space" button into view...');
-    await requestSpaceButton.scrollIntoViewIfNeeded();
-
-    logger(
-      "INFO",
-      'Clicking "Request Space" button (will wait for enabled)...'
-    );
-
     await requestSpaceButton.click({ timeout: 30000 });
 
     const successAlertLocator = page.locator(
@@ -319,11 +240,8 @@ async function bookParkingSpace(
 
     try {
       await page.waitForFunction(
-        (selectors) => {
-          return selectors.some(
-            (selector) => !!document.querySelector(selector)
-          );
-        },
+        (selectors) =>
+          selectors.some((selector) => !!document.querySelector(selector)),
         [
           successAlertLocator.first().toString(),
           errorAlertLocator.first().toString(),
@@ -337,75 +255,39 @@ async function bookParkingSpace(
         (await successAlertLocator.first().isVisible())
       ) {
         const successMsg = await successAlertLocator.first().textContent();
-        logger("INFO", `Booking successful! Message: ${successMsg?.trim()}`);
-        await page.screenshot({
-          path: `booking_success_${fullDateForLog}.png`,
-        });
+        log("INFO", `Booking successful for ${fullDateForLog}! Message: ${successMsg?.trim()}`);
         return "booked";
       } else if (
         (await noSpacesMessageLocator.count()) > 0 &&
         (await noSpacesMessageLocator.first().isVisible())
       ) {
         const messageText = await noSpacesMessageLocator.first().textContent();
-        logger(
-          "WARNING",
-          `No spaces available after attempting to book: ${messageText?.trim()}`
-        );
-        await page.screenshot({
-          path: `no_spaces_after_click_${fullDateForLog}.png`,
-        });
+        log("WARNING", `No spaces available for ${fullDateForLog} (post-submit check): ${messageText?.trim()}`);
         return "no_spaces";
       } else if (
         (await errorAlertLocator.count()) > 0 &&
         (await errorAlertLocator.first().isVisible())
       ) {
         const errorMsg = await errorAlertLocator.first().textContent();
-        logger(
-          "ERROR",
-          `Booking failed with error message: ${errorMsg?.trim()}`
-        );
-        await page.screenshot({
-          path: `booking_error_alert_${fullDateForLog}.png`,
-        });
+        log("ERROR", `Booking failed for ${fullDateForLog}. Message: ${errorMsg?.trim()}`);
         return "failed";
       } else {
-        logger(
-          "WARNING",
-          "Booking submitted, but confirmation message not definitively found. Assuming failure for safety."
-        );
-        await page.screenshot({
-          path: `booking_unknown_state_${fullDateForLog}.png`,
-        });
+        log("WARNING", `Booking for ${fullDateForLog} submitted, but outcome unclear. Assuming failure.`);
         return "failed";
       }
     } catch (e: any) {
-      logger(
-        "ERROR",
-        `Timeout or error waiting for booking confirmation: ${e.message}`
-      );
-      await page.screenshot({
-        path: `booking_timeout_error_${fullDateForLog}.png`,
-      });
+      log("ERROR", `Timeout or error waiting for booking confirmation for ${fullDateForLog}: ${e.message}`);
       return "failed";
     }
   } catch (error: any) {
-    logger(
-      "ERROR",
-      `General error during booking process for ${fullDateForLog}: ${error.message}`
-    );
-    await page.screenshot({
-      path: `booking_general_error_${fullDateForLog}.png`,
-    });
+    log("ERROR", `General error during booking process for ${fullDateForLog}: ${error.message}`);
     return "failed";
   }
 }
 
 async function main(): Promise<void> {
   if (!USERNAME || !PASSWORD) {
-    logger(
-      "ERROR",
-      "Credentials (WAYLEADR_USERNAME, WAYLEADR_PASSWORD) are not set in environment variables."
-    );
+    log("ERROR", "Credentials (WAYLEADR_USERNAME, WAYLEADR_PASSWORD) are not set.");
     process.exit(1);
   }
 
@@ -416,18 +298,18 @@ async function main(): Promise<void> {
   const bookingsToAttempt: Date[] = [];
   for (const booking of allBookings) {
     if (booking.status === "pending") {
-      const targetParkingDate = parseISO(booking.parking_date);
+      const targetParkingDate = parse(
+        booking.parking_date,
+        TARGET_DATE_FORMAT,
+        new Date()
+      );
       if (!isValidDate(targetParkingDate)) {
-        logger(
-          "WARNING",
-          `Invalid date format in bookings.json: ${booking.parking_date}. Skipping.`
-        );
+        log("WARNING", `Invalid date in bookings.json: ${booking.parking_date}. Skipping.`);
         continue;
       }
       targetParkingDate.setHours(0, 0, 0, 0);
 
       const dayToMakeBooking = addDays(targetParkingDate, -1);
-
       if (today.getTime() === dayToMakeBooking.getTime()) {
         bookingsToAttempt.push(targetParkingDate);
       }
@@ -435,20 +317,17 @@ async function main(): Promise<void> {
   }
 
   if (bookingsToAttempt.length === 0) {
-    logger("INFO", "No pending bookings scheduled for execution today.");
+    log("INFO", "No pending bookings scheduled for execution today.");
     return;
   }
 
-  logger(
-    "INFO",
-    `Found ${
-      bookingsToAttempt.length
-    } booking(s) to attempt today: ${bookingsToAttempt
+  log("INFO", `Found ${bookingsToAttempt.length} booking(s) to attempt: 
+    ${bookingsToAttempt
       .map((d) => format(d, TARGET_DATE_FORMAT))
       .join(", ")}`
   );
 
-  const browser: Browser = await chromium.launch({
+  const browser = await chromium.launch({
     headless: process.env.NODE_ENV === "production",
     args: [
       "--no-sandbox",
@@ -472,48 +351,35 @@ async function main(): Promise<void> {
         await updateBookingStatus(
           dateToBook,
           result,
-          `Attempted on ${new Date().toISOString()}`
+          `Attempted on ${format(new Date(), TARGET_DATE_FORMAT)}`
         );
         if (result !== "booked") {
-          logger(
-            "INFO",
-            `Pausing for a moment after a non-successful booking attempt for ${format(
-              dateToBook,
-              TARGET_DATE_FORMAT
-            )}.`
-          );
+          log("INFO", `Pausing after non-successful attempt for ${format(dateToBook, TARGET_DATE_FORMAT)}.`);
           await page.waitForTimeout(2000);
         }
       }
     } else {
-      logger("ERROR", "Login failed. No bookings will be attempted.");
+      log("ERROR", "Login failed. No bookings will be attempted.");
       for (const dateToBook of bookingsToAttempt) {
         await updateBookingStatus(
           dateToBook,
           "failed",
-          `Login failed on ${new Date().toISOString()}`
+          `Login failed on ${format(new Date(), TARGET_DATE_FORMAT)}`
         );
       }
     }
   } catch (error: any) {
-    logger(
-      "ERROR",
-      `An unhandled error occurred in main execution: ${error.message}`
-    );
+    log("ERROR", `Unhandled error in main execution: ${error.message}`);
     for (const dateToBook of bookingsToAttempt) {
-      await updateBookingStatus(
-        dateToBook,
-        "failed",
-        `Unhandled script error: ${error.message}`
-      );
+      await updateBookingStatus(dateToBook, "failed", `Unhandled script error: ${error.message}`);
     }
   } finally {
-    logger("INFO", "Closing browser.");
+    log("INFO", "Closing browser.");
     await browser.close();
   }
 }
 
 main().catch((error) => {
-  logger("ERROR", `Unhandled error at top level: ${error.message}`);
+  log("ERROR", `Unhandled error at top level: ${error.message}`);
   process.exit(1);
 });
