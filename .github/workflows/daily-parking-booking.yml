@@ -1,0 +1,51 @@
+name: Daily Parking Booking
+
+on:
+  schedule:
+    - cron: '30 0 * * *' 
+  workflow_dispatch:
+
+jobs:
+  attempt_parking_booking:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build TypeScript
+        run: npm run build 
+
+      - name: Run Parking Booking Script
+        env:
+          WAYLEADR_USERNAME: ${{ secrets.WAYLEADR_USERNAME }}
+          WAYLEADR_PASSWORD: ${{ secrets.WAYLEADR_PASSWORD }}
+          NODE_ENV: production
+        run: node dist/parking-booking.js
+
+      - name: Commit and push changes if necessary
+        if: success()
+        run: |
+          git config --global user.name "${{ secrets.GIT_COMMIT_USER_NAME }}"
+          git config --global user.email "${{ secrets.GIT_COMMIT_USER_EMAIL }}"
+          git add bookings.json
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: Automated daily parking booking update [skip ci]"
+            git push
+          else
+            echo "No changes to bookings.json to commit from daily job."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
