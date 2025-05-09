@@ -2,8 +2,11 @@ name: Daily Parking Booking
 
 on:
   schedule:
-    - cron: '30 0 * * *' 
+    - cron: '30 23 * * *' # 23:30 UTC => 00:30 Serbian time
   workflow_dispatch:
+
+env:
+  TZ: Europe/Belgrade
 
 jobs:
   attempt_parking_booking:
@@ -33,6 +36,7 @@ jobs:
           WAYLEADR_USERNAME: ${{ secrets.WAYLEADR_USERNAME }}
           WAYLEADR_PASSWORD: ${{ secrets.WAYLEADR_PASSWORD }}
           NODE_ENV: production
+          TZ: Europe/Belgrade
         run: node dist/parking-booking.js
 
       - name: Commit and push changes if necessary
