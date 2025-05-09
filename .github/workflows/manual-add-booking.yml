@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       booking_date:
-        description: "Date to book (YYYY-MM-DD)"
+        description: "Date to book (DD-MM-YYYY)"
         required: true
         type: string
-        default: "YYYY-MM-DD"
+        default: "DD-MM-YYYY"
 
 jobs:
   add_booking:
@@ -35,15 +35,16 @@ jobs:
 
       - name: Commit and push changes
         run: |
-          git config --global user.name 'GitHub Actions Bot'
-          git config --global user.email 'actions-bot@github.com'
-          git add bookings.json # Or the correct path to your bookings.json if it's different
+          git config --global user.name "${{ secrets.GIT_COMMIT_USER_NAME }}"
+          git config --global user.email "${{ secrets.GIT_COMMIT_USER_EMAIL }}"
+          git add bookings.json # Or the correct path
           # Check if there are changes to commit
           if ! git diff --staged --quiet; then
             git commit -m "chore: Add booking for ${{ github.event.inputs.booking_date }} [skip ci]"
+            # The push will be authenticated using the PAT from the checkout step
             git push
           else
             echo "No changes to bookings.json to commit."
           fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
