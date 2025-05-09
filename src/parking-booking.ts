@@ -1,17 +1,15 @@
-import { chromium, Browser, Page } from "playwright";
+import { chromium, Page } from "playwright";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { format, addDays, parse, isValid as isValidDate } from "date-fns"; // Removed isBefore as it wasn't used in the simplified filter
-import { Booking, TARGET_DATE_FORMAT } from "./types";
+import { format, addDays, parse, isValid as isValidDate } from "date-fns";
+import { Booking, TARGET_DATE_FORMAT, log } from "./util";
 
 const BOOKINGS_FILE = path.join(__dirname, "..", "bookings.json");
 const USERNAME = process.env.WAYLEADR_USERNAME;
 const PASSWORD = process.env.WAYLEADR_PASSWORD;
+const WAYLEADR_URL = "https://app.wayleadr.com/users/sign_in";
 
-function log(level: "INFO" | "ERROR" | "WARNING", message: string): void {
-  const timestamp = format(new Date(), TARGET_DATE_FORMAT);
-  console.log(`${timestamp} - ${level}: ${message}`);
-}
+
 
 async function loadBookings(): Promise<Booking[]> {
   try {
@@ -96,7 +94,7 @@ async function updateBookingStatus(
 async function loginToWayleadr(page: Page): Promise<boolean> {
   try {
     log("INFO", "Navigating to Wayleadr login page...");
-    await page.goto("https://app.wayleadr.com/users/sign_in", {
+    await page.goto(WAYLEADR_URL, {
       waitUntil: "domcontentloaded",
       timeout: 60000,
     });
@@ -118,13 +116,8 @@ async function loginToWayleadr(page: Page): Promise<boolean> {
       !page.url().includes("/request_space") &&
       !page.url().includes("/request/new")
     ) {
-      log(
-        "INFO",
-        'Not on booking page, attempting to click "Book Space" link/button...'
-      );
-      const bookSpaceButtonLocator = page.locator(
-        'a.btn.btn-primary.mr-3:has-text("Book Space"):has(i.fe-plus.mr-2)'
-      );
+      log("INFO", 'Not on booking page, attempting to click "Book Space" link/button...');
+      const bookSpaceButtonLocator = page.locator('a.btn.btn-primary.mr-3:has-text("Book Space"):has(i.fe-plus.mr-2)');
       try {
         await bookSpaceButtonLocator.waitFor({
           state: "visible",
@@ -139,10 +132,7 @@ async function loginToWayleadr(page: Page): Promise<boolean> {
         ]);
         log("INFO", 'Navigated to booking form via "Book Space" button.');
       } catch (e: any) {
-        log(
-          "WARNING",
-          `"Book Space" button not found or failed to navigate: ${e.message}. Proceeding.`
-        );
+        log("WARNING", `"Book Space" button not found or failed to navigate: ${e.message}. Proceeding.`);
       }
     }
 

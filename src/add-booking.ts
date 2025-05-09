@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { parse, parseISO, isValid as isValidDate, format } from "date-fns";
-import { Booking, TARGET_DATE_FORMAT } from "./types";
+import { Booking, TARGET_DATE_FORMAT, log } from "./util";
 
 const BOOKINGS_FILE = path.join(__dirname, "..", "bookings.json");
 
@@ -13,7 +13,7 @@ async function loadBookings(): Promise<Booking[]> {
     if (error.code === "ENOENT") {
       return [];
     }
-    console.error(`Error loading bookings: ${error.message}`);
+    log("ERROR", `Error loading bookings: ${error.message}`);
     return [];
   }
 }
@@ -21,10 +21,10 @@ async function loadBookings(): Promise<Booking[]> {
 async function saveBookings(bookings: Booking[]): Promise<boolean> {
   try {
     await fs.writeFile(BOOKINGS_FILE, JSON.stringify(bookings, null, 2));
-    console.log(`Bookings saved to ${BOOKINGS_FILE}`);
+    log("INFO", `Bookings saved to ${BOOKINGS_FILE}`);
     return true;
   } catch (error: any) {
-    console.error(`Error saving bookings: ${error.message}`);
+    log("ERROR", `Error saving bookings: ${error.message}`);
     return false;
   }
 }
@@ -32,13 +32,8 @@ async function saveBookings(bookings: Booking[]): Promise<boolean> {
 async function addBookingEntry(dateStr: string): Promise<boolean> {
   try {
     const parkingDate = parse(dateStr, TARGET_DATE_FORMAT, new Date());
-    if (
-      !isValidDate(parkingDate) ||
-      format(parkingDate, TARGET_DATE_FORMAT) !== dateStr
-    ) {
-      console.error(
-        `Invalid date format: "${dateStr}". Please use DD-MM-YYYY format (e.g., 31-12-2025).`
-      );
+    if (!isValidDate(parkingDate) || format(parkingDate, TARGET_DATE_FORMAT) !== dateStr) {
+      log("ERROR", `Invalid date format: "${dateStr}". Please use DD-MM-YYYY format (e.g., 31-12-2025).`);
       return false;
     }
 
@@ -46,9 +41,7 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
     const existingBooking = bookings.find((b) => b.parking_date === dateStr);
 
     if (existingBooking) {
-      console.warn(
-        `Booking for ${dateStr} already exists with status: ${existingBooking.status}.`
-      );
+      log("WARNING", `Booking for ${dateStr} already exists with status: ${existingBooking.status}.`);
       if (
         existingBooking.status === "failed" ||
         existingBooking.status === "no_spaces"
@@ -56,7 +49,7 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
         existingBooking.status = "pending";
         existingBooking.last_attempt = undefined;
         existingBooking.attempt_message = "Re-added by user";
-        console.log(`Status for ${dateStr} reset to 'pending'.`);
+        log("INFO", `Status for ${dateStr} reset to 'pending'.`);
       } else {
         return false;
       }
@@ -68,7 +61,7 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
         last_attempt: undefined,
       };
       bookings.push(newBooking);
-      console.log(`Added new booking for ${dateStr}`);
+      log("INFO", `Added new booking for ${dateStr}`);
     }
 
     bookings.sort(
@@ -78,7 +71,7 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
 
     return await saveBookings(bookings);
   } catch (error: any) {
-    console.error(`Error adding booking for ${dateStr}: ${error.message}`);
+    log("ERROR", `Error adding booking for ${dateStr}: ${error.message}`);
     return false;
   }
 }
@@ -93,10 +86,10 @@ async function mainCli(): Promise<void> {
     return;
   }
 
-  console.error("Invalid arguments.");
+  log("ERROR", "Invalid arguments.");
 }
 
 mainCli().catch((error) => {
-  console.error(`Unhandled error in add-booking CLI: ${error.message}`);
+  log("ERROR", `Unhandled error in add-booking CLI: ${error.message}`);
   process.exit(1);
 });
