@@ -4,14 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       booking_date:
-        description: 'Date to book (YYYY-MM-DD)'
+        description: "Date to book (YYYY-MM-DD)"
         required: true
         type: string
-        default: 'YYYY-MM-DD'
+        default: "YYYY-MM-DD"
 
 jobs:
   add_booking:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -20,15 +22,28 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18' # Specify your Node.js version
+          node-version: "18"
 
       - name: Install dependencies
-        run: npm install # Or yarn install
+        run: npm install
 
-      # If your TypeScript scripts need to be compiled first
       - name: Build TypeScript
-        run: npm run build # Or your specific build command, e.g., tsc
+        run: npm run build
 
       - name: Run Add Booking Script
         run: node dist/add-booking.js --add ${{ github.event.inputs.booking_date }}
-        # If using ts-node: npx ts-node add-booking.ts --add ${{ github.event.inputs.booking_date }}
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name 'GitHub Actions Bot'
+          git config --global user.email 'actions-bot@github.com'
+          git add bookings.json # Or the correct path to your bookings.json if it's different
+          # Check if there are changes to commit
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: Add booking for ${{ github.event.inputs.booking_date }} [skip ci]"
+            git push
+          else
+            echo "No changes to bookings.json to commit."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
