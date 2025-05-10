@@ -14,9 +14,10 @@ export interface Booking {
 }
 
 const TARGET_DATE_FORMAT = "dd-MM-yyyy";
+const LOG_DATE_FORMAT = "dd-MM-yyyy HH:mm:ss";
 
 export function log(level: "INFO" | "ERROR" | "WARNING", message: string): void {
-  const timestamp = format(new Date(), TARGET_DATE_FORMAT);
+  const timestamp = format(new Date(), LOG_DATE_FORMAT);
   console.log(`${timestamp} - ${level}: ${message}`);
 }
 

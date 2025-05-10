@@ -5,8 +5,7 @@
   "main": "dist/parking-booking.js",
   "scripts": {
     "build": "tsc",
-    "start": "npm run build && node dist/parking-booking.js",
-    "book": "npm run start",
+    "book": "npm run build && node dist/parking-booking.js",
     "add": "npm run build && node dist/add-booking.js --add"
   },
   "dependencies": {
