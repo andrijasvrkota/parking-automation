@@ -1,7 +1,7 @@
 import { isValid as isValidDate } from "date-fns";
 import { getFormattedDate, loadBookings, log, parseDate, saveBookings } from "./util";
 
-const RESET_STATUSES = ["failed", "no_spaces"];
+const RESET_STATUSES = ["failed", "no_space"];
 
 async function addBookingEntry(dateStr: string): Promise<boolean> {
   const date = parseDate(dateStr);
@@ -32,6 +32,6 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
     const success = await addBookingEntry(date);
     process.exit(success ? 0 : 1);
   }
-  log("ERROR", "Usage: npm run add-booking -- --add <DD-MM-YYYY>");
+  log("ERROR", "Usage: npm run add-booking -- <DD-MM-YYYY>");
   process.exit(1);
 })();

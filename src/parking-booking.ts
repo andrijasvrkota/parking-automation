@@ -67,7 +67,7 @@ async function updateBookingStatus(
 
     const isRecent = bookingDateObj >= sevenDaysAgo;
     const isPending = b.status === "pending";
-    const isFutureOrTodayNoSpaces = b.status === "no_spaces" && bookingDateObj >= today;
+    const isFutureOrTodayNoSpaces = b.status === "no_space" && bookingDateObj >= today;
     const isRelevantBooked = b.status === "booked" && bookingDateObj >= sevenDaysAgo;
     const isRecentFailed = b.status === "failed" && isRecent;
 
@@ -137,7 +137,7 @@ async function bookParkingSpace(page: Page, date: Date): Promise<BookingStatus> 
     const day = getDay(date);
     await clickWhenReady(page.locator(S.calendarTable).locator(S.dayCell(day)));
     if (await page.locator(S.noSpacesMessage).isVisible({ timeout: 3000 }).catch(() => false)) {
-      return "no_spaces";
+      return "no_space";
     }
 
     const submitButton = page.locator(S.submitButton);
@@ -154,7 +154,7 @@ async function bookParkingSpace(page: Page, date: Date): Promise<BookingStatus> 
     );
 
     if (await page.locator(S.successAlert).isVisible().catch(() => false)) return "booked";
-    if (await page.locator(S.noSpacesMessage).isVisible().catch(() => false)) return "no_spaces";
+    if (await page.locator(S.noSpacesMessage).isVisible().catch(() => false)) return "no_space";
     if (await page.locator(S.errorAlert).isVisible().catch(() => false)) return "failed";
     return "failed";
   } catch (error: any) {
@@ -171,7 +171,6 @@ async function main(): Promise<void> {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  // Pick the one booking scheduled for tomorrow
   const nextBookingDate = (await loadBookings())
     .filter(b => b.status === "pending")
     .map(b => parseDate(b.parking_date))

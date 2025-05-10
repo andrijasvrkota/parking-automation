@@ -4,7 +4,7 @@ import * as fs from "fs/promises";
 
 const BOOKINGS_FILE = path.join(__dirname, "..", "bookings.json");
 
-export type BookingStatus = "pending" | "booked" | "failed" | "no_spaces";
+export type BookingStatus = "pending" | "booked" | "failed" | "no_space";
 export interface Booking {
   parking_date: string; // DD-MM-YYYY
   status: BookingStatus;
