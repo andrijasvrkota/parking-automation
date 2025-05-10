@@ -50,7 +50,7 @@ jobs:
           git config --global user.email "${{ secrets.GIT_COMMIT_USER_EMAIL }}"
           git add bookings.json
           if ! git diff --staged --quiet; then
-            git commit -m "chore: Automated daily parking booking update [skip ci]"
+            git commit -m "chore: Automated daily parking booking update"
             git push
           else
             echo "No changes to bookings.json to commit from daily job."

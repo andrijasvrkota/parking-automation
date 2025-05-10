@@ -40,7 +40,7 @@ jobs:
           git add bookings.json # Or the correct path
           # Check if there are changes to commit
           if ! git diff --staged --quiet; then
-            git commit -m "chore: Add booking for ${{ github.event.inputs.booking_date }} [skip ci]"
+            git commit -m "chore: Add booking for ${{ github.event.inputs.booking_date }}"
             # The push will be authenticated using the PAT from the checkout step
             git push
           else
