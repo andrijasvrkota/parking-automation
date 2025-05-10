@@ -40,7 +40,7 @@ jobs:
           WAYLEADR_PASSWORD: ${{ secrets.WAYLEADR_PASSWORD }}
           NODE_ENV: production
           TZ: Europe/Belgrade
-        run: node dist/parking-booking.js
+        run: npm run book
 
       - name: Commit and push changes if necessary
         if: success()

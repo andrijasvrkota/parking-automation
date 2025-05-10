@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "book": "npm run build && node dist/parking-booking.js",
-    "add": "npm run build && node dist/add-booking.js --add"
+    "add-booking": "npm run build && node dist/add-booking.js --add"
   },
   "dependencies": {
     "date-fns": "2.30.0",

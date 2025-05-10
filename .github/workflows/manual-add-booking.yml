@@ -31,7 +31,7 @@ jobs:
         run: npm run build
 
       - name: Run Add Booking Script
-        run: node dist/add-booking.js --add ${{ github.event.inputs.booking_date }}
+        run: npm run add-booking -- ${{ github.event.inputs.booking_date }}
 
       - name: Commit and push changes
         run: |

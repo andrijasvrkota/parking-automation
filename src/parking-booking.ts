@@ -73,8 +73,13 @@ async function main(): Promise<void> {
   const wp = new WayleadrPage(page);
   let result: BookingStatus = "failed";
   try {
+    log("INFO", "Logging in to Wayleadr");
     await wp.login(USERNAME!, PASSWORD!);
+
+    log("INFO", "Selecting date");
     await wp.selectDate(next);
+
+    log("INFO", "Submitting booking request");
     result = await wp.submit();
   } catch (e: any) {
     log("ERROR", `Error: ${e.message}`);
