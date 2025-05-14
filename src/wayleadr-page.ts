@@ -20,6 +20,9 @@ export class WayleadrPage {
   private get submitButton(): Locator { return this.page.locator('input#form-submit-button[value="Request Space"]'); }
   private get successAlert(): Locator { return this.page.locator('div[class*="alert-success"], div:has-text("Booking successful"), div:has-text("Request submitted")'); }
   private get errorAlert(): Locator { return this.page.locator('div[class*="alert-danger"], div[class*="alert-error"], div:has-text("error")'); }
+  private get zoneDropdown(): Locator { return this.page.locator('select#booking_request_zone_id, div.preferred-zone select, select:has-option:text("Paid Parking")'); }
+  private get paidParkingOption(): Locator { return this.page.locator('option:has-text("Paid Parking")'); }
+  private get zoneSelect(): Locator { return this.page.locator('select#booking_request_preferred_zone_id'); }
 
   private async clickWhenReady(locator: Locator, timeout = 10000) {
     await locator.waitFor({ state: "visible", timeout });
@@ -44,10 +47,21 @@ export class WayleadrPage {
     await this.clickWhenReady(this.dateInput);
     await this.clickWhenReady(this.calendarContainer);
     await this.clickWhenReady(this.dayCell(getDay(date)));
+    await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // click to dismiss calendar popup
+  }
+
+  async switchToPaidParking() {
+    await this.clickWhenReady(this.zoneDropdown);
+    await this.clickWhenReady(this.paidParkingOption);
+    await this.page.waitForTimeout(1000);
   }
 
   async submit(): Promise<BookingStatus> {
-    if (await this.noSpacesMessage.isVisible({ timeout: 3000 }).catch(() => false)) return "no_space";
+    if (await this.noSpacesMessage.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await this.zoneSelect.selectOption({ label: 'Paid Parking' });
+    }
+    
+    // Submit the form (either with Shared Spaces or Paid Parking)
     await this.clickWhenReady(this.submitButton, 20000);
     await this.page.waitForFunction(
       (selectors) => selectors.some((s: string) => !!document.querySelector(s)),
