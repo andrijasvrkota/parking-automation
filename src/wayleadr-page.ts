@@ -48,6 +48,9 @@ export class WayleadrPage {
     await this.clickWhenReady(this.calendarContainer);
     await this.clickWhenReady(this.dayCell(getDay(date)));
     await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // click to dismiss calendar popup
+    if (await this.noSpacesMessage.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await this.switchToPaidParking();
+    }
   }
 
   async switchToPaidParking() {
@@ -57,11 +60,6 @@ export class WayleadrPage {
   }
 
   async submit(): Promise<BookingStatus> {
-    if (await this.noSpacesMessage.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await this.zoneSelect.selectOption({ label: 'Paid Parking' });
-    }
-    
-    // Submit the form (either with Shared Spaces or Paid Parking)
     await this.clickWhenReady(this.submitButton, 20000);
     await this.page.waitForFunction(
       (selectors) => selectors.some((s: string) => !!document.querySelector(s)),
