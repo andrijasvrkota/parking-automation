@@ -18,7 +18,7 @@ export class WayleadrPage {
   }
   private get noSpacesMessage(): Locator { return this.page.locator('#pricing-breakdown li:has-text("There are no available spaces")') }
   private get submitButton(): Locator { return this.page.locator('input#form-submit-button[value="Request Space"]'); }
-  private get successAlert(): Locator { return this.page.locator('div[class*="alert-success"], div:has-text("Booking successful"), div:has-text("Request submitted")'); }
+  private get successAlert(): Locator { return this.page.locator('div.alert:has-text("Booking Request was successfully created")'); }
   private get errorAlert(): Locator { return this.page.locator('div[class*="alert-danger"], div[class*="alert-error"], div:has-text("error")'); }
   private get zoneDropdown(): Locator { return this.page.locator('select#booking_request_preferred_zone_id'); }
 
