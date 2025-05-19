@@ -16,13 +16,12 @@ export class WayleadrPage {
   private dayCell(day: string): Locator {
     return this.calendarTable.locator(`td:not(.ui-datepicker-unselectable):not(.ui-state-disabled) a.ui-state-default[data-date="${day}"]`);
   }
-  private get noSpacesMessage(): Locator { return this.page.locator('div:text-matches("There are no available spaces", "i"), p:text-matches("There are no available spaces", "i")'); }
+  private get noSpacesMessage(): Locator { return this.page.locator('#pricing-breakdown li:has-text("There are no available spaces")') }
   private get submitButton(): Locator { return this.page.locator('input#form-submit-button[value="Request Space"]'); }
   private get successAlert(): Locator { return this.page.locator('div[class*="alert-success"], div:has-text("Booking successful"), div:has-text("Request submitted")'); }
   private get errorAlert(): Locator { return this.page.locator('div[class*="alert-danger"], div[class*="alert-error"], div:has-text("error")'); }
-  private get zoneDropdown(): Locator { return this.page.locator('select#booking_request_zone_id, div.preferred-zone select, select:has-option:text("Paid Parking")'); }
+  private get zoneDropdown(): Locator { return this.page.locator('select#booking_request_preferred_zone_id'); }
   private get paidParkingOption(): Locator { return this.page.locator('option:has-text("Paid Parking")'); }
-  private get zoneSelect(): Locator { return this.page.locator('select#booking_request_preferred_zone_id'); }
 
   private async clickWhenReady(locator: Locator, timeout = 10000) {
     await locator.waitFor({ state: "visible", timeout });
@@ -48,35 +47,38 @@ export class WayleadrPage {
     await this.clickWhenReady(this.calendarContainer);
     await this.clickWhenReady(this.dayCell(getDay(date)));
     await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // click to dismiss calendar popup
-    if (await this.noSpacesMessage.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await this.page.waitForTimeout(3000);
+    const sharedUnavailable = await this.noSpacesMessage.isVisible({ timeout: 2000 }).catch(() => false);
+    if (sharedUnavailable) {
+      console.log("Switching to Paid Parking...");
       await this.switchToPaidParking();
+
+      // Wait a bit for UI to update and check again
+      await this.page.waitForTimeout(1000);
+      await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // maybe help UI update
     }
   }
 
   async switchToPaidParking() {
-    await this.clickWhenReady(this.zoneDropdown);
-    await this.clickWhenReady(this.paidParkingOption);
+    // await this.clickWhenReady(this.zoneDropdown);
+    // await this.clickWhenReady(this.paidParkingOption);
+    await this.zoneDropdown.waitFor({ state: "visible", timeout: 10000 });
+    await this.zoneDropdown.selectOption({ label: "Paid Parking" });
     await this.page.waitForTimeout(1000);
   }
 
-  async submit(): Promise<BookingStatus> {
-    await this.clickWhenReady(this.submitButton, 20000);
-    await this.page.waitForFunction(
-      (selectors) => selectors.some((s: string) => !!document.querySelector(s)),
-      [
-        'div[class*="alert-success"]',
-        'div:has-text("Booking successful")',
-        'div:has-text("Request submitted")',
-        'div[class*="alert-danger"]',
-        'div[class*="alert-error"]',
-        'div:has-text("error")',
-        'div:text-matches("There are no available spaces", "i"), p:text-matches("There are no available spaces", "i")'
-      ],
-      { timeout: 20000 }
-    );
-    if (await this.successAlert.isVisible().catch(() => false)) return "booked";
-    if (await this.noSpacesMessage.isVisible().catch(() => false)) return "no_space";
-    if (await this.errorAlert.isVisible().catch(() => false)) return "failed";
-    return "failed";
-  }
+async submit(): Promise<BookingStatus> {
+  await this.clickWhenReady(this.submitButton, 20000);
+
+  await Promise.race([
+    this.successAlert.waitFor({ timeout: 20000 }).catch(() => {}),
+    this.errorAlert.waitFor({ timeout: 20000 }).catch(() => {}),
+    this.noSpacesMessage.waitFor({ timeout: 20000 }).catch(() => {}),
+  ]);
+
+  if (await this.successAlert.isVisible().catch(() => false)) return "booked";
+  if (await this.noSpacesMessage.isVisible().catch(() => false)) return "no_space";
+  if (await this.errorAlert.isVisible().catch(() => false)) return "failed";
+  return "failed";
+}
 }
