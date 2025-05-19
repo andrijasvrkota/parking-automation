@@ -79,6 +79,11 @@ async function main(): Promise<void> {
     log("INFO", "Selecting date");
     await wp.selectDate(next);
 
+    if(await wp.isSharedSpaceUnavailable()) {
+      log("INFO", "Shared spaces are not available, switching to Paid Parking");
+      await wp.switchToPaidParking();
+    }
+
     log("INFO", "Submitting booking request");
     result = await wp.submit();
   } catch (e: any) {

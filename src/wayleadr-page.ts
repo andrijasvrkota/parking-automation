@@ -21,7 +21,6 @@ export class WayleadrPage {
   private get successAlert(): Locator { return this.page.locator('div[class*="alert-success"], div:has-text("Booking successful"), div:has-text("Request submitted")'); }
   private get errorAlert(): Locator { return this.page.locator('div[class*="alert-danger"], div[class*="alert-error"], div:has-text("error")'); }
   private get zoneDropdown(): Locator { return this.page.locator('select#booking_request_preferred_zone_id'); }
-  private get paidParkingOption(): Locator { return this.page.locator('option:has-text("Paid Parking")'); }
 
   private async clickWhenReady(locator: Locator, timeout = 10000) {
     await locator.waitFor({ state: "visible", timeout });
@@ -46,25 +45,19 @@ export class WayleadrPage {
     await this.clickWhenReady(this.dateInput);
     await this.clickWhenReady(this.calendarContainer);
     await this.clickWhenReady(this.dayCell(getDay(date)));
-    await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // click to dismiss calendar popup
-    await this.page.waitForTimeout(3000);
-    const sharedUnavailable = await this.noSpacesMessage.isVisible({ timeout: 2000 }).catch(() => false);
-    if (sharedUnavailable) {
-      console.log("Switching to Paid Parking...");
-      await this.switchToPaidParking();
+    await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // dismiss calendar popup
+    await this.page.waitForTimeout(2000);
+  }
 
-      // Wait a bit for UI to update and check again
-      await this.page.waitForTimeout(1000);
-      await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // maybe help UI update
-    }
+  async isSharedSpaceUnavailable(): Promise<boolean> {
+    return await this.noSpacesMessage.isVisible({ timeout: 2000 }).catch(() => false);
   }
 
   async switchToPaidParking() {
-    // await this.clickWhenReady(this.zoneDropdown);
-    // await this.clickWhenReady(this.paidParkingOption);
     await this.zoneDropdown.waitFor({ state: "visible", timeout: 10000 });
     await this.zoneDropdown.selectOption({ label: "Paid Parking" });
-    await this.page.waitForTimeout(1000);
+    await this.page.waitForTimeout(2000);
+    await this.page.locator('body').click({ position: { x: 0, y: 0 } }); // dismiss select popup
   }
 
 async submit(): Promise<BookingStatus> {
