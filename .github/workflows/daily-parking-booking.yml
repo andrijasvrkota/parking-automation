@@ -2,7 +2,7 @@ name: Daily Parking Booking
 
 on:
   schedule:
-    - cron: '30 23 * * *' # 23:30 UTC => 00:30 Serbian time
+    - cron: '30 03 * * *' # 03:30 UTC => 04:30 Serbian time
   workflow_dispatch:
 
 env:
