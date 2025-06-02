@@ -1,36 +1,10 @@
 [
   {
-    "parking_date": "15-05-2025",
-    "status": "failed",
-    "created_at": "14-05-2025",
-    "attempt_message": "Booking not successful on 14-05-2025. Result: failed",
-    "last_attempt": "14-05-2025"
-  },
-  {
-    "parking_date": "19-05-2025",
-    "status": "failed",
-    "created_at": "17-05-2025",
-    "last_attempt": "18-05-2025",
-    "attempt_message": "Booking not successful on 18-05-2025. Result: failed"
-  },
-  {
-    "parking_date": "20-05-2025",
-    "status": "failed",
-    "created_at": "18-05-2025",
-    "last_attempt": "19-05-2025",
-    "attempt_message": "Booking not successful on 19-05-2025. Result: failed"
-  },
-  {
-    "parking_date": "21-05-2025",
-    "status": "failed",
-    "created_at": "19-05-2025",
-    "last_attempt": "20-05-2025",
-    "attempt_message": "Booking not successful on 20-05-2025. Result: failed"
-  },
-  {
     "parking_date": "03-06-2025",
-    "status": "pending",
-    "created_at": "29-05-2025"
+    "status": "booked",
+    "created_at": "29-05-2025",
+    "last_attempt": "02-06-2025",
+    "attempt_message": "Attempted on 02-06-2025. Result: booked"
   },
   {
     "parking_date": "04-06-2025",
