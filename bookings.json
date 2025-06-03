@@ -8,7 +8,9 @@
   },
   {
     "parking_date": "04-06-2025",
-    "status": "pending",
-    "created_at": "29-05-2025"
+    "status": "booked",
+    "created_at": "29-05-2025",
+    "last_attempt": "03-06-2025",
+    "attempt_message": "Attempted on 03-06-2025. Result: booked"
   }
 ]
