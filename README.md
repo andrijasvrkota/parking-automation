@@ -1,6 +1,6 @@
 # 🚗 Parking Booking Automation
 
-A daily-running GitHub-Actions workflow that automatically books your Wayleadr parking for you.
+A GitHub Actions–powered workflow that runs **daily at 04:30 AM** (CET/CEST) to automatically reserve your Wayleadr parking for the next day.
 
 ## 📋 Overview
 
@@ -20,11 +20,11 @@ For this to work you just need to do the following:
 
 | Secret Name | Description |
 |-------------|-------------|
-| WAYLEADR_USERNAME | Your Wayleadr email address |
-| WAYLEADR_PASSWORD | Your Wayleadr password |
-| GH_PAT | GitHub token (for pushing updated JSON & commits) |
-| GIT_COMMIT_USER_NAME | Name for automated commits |
-| GIT_COMMIT_USER_EMAIL | Email for automated commits |
+| `WAYLEADR_USERNAME` | Your Wayleadr email address |
+| `WAYLEADR_PASSWORD` | Your Wayleadr password |
+| `GH_PAT` | GitHub token (for pushing updated JSON & commits) |
+| `GIT_COMMIT_USER_NAME` | Name for automated commits |
+| `GIT_COMMIT_USER_EMAIL` | Email for automated commits |
 
 ## 📅 Usage
 
@@ -50,6 +50,7 @@ npm run book
 
 ## 📁 Project Structure
 
+```
 ├── src/
 │   ├── wayleadr-page.ts      # Playwright page object
 │   ├── parking-booking.ts    # Main booking automation logic
@@ -60,7 +61,7 @@ npm run book
 │   └── manual-add-booking.yml       # Manual booking workflow
 ├── bookings.json             # Auto-generated booking history
 └── package.json
-
+```
 
 
 ## 📊 Booking Status Types
