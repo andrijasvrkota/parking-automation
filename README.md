@@ -41,11 +41,11 @@ To add a specific date for booking:
 
 ### Local Development
 
-bash
-# Add a booking locally
+
+#### Add a booking locally
 npm run add-booking 15-01-2025
 
-# Run the booking script locally (requires environment variables)
+#### Run the booking script locally (requires environment variables)
 npm run book
 
 ## 📁 Project Structure
