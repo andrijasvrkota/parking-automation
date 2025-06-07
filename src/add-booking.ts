@@ -7,7 +7,7 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
   const date = parseDate(dateStr);
   if (!isValidDate(date) || getFormattedDate(date) !== dateStr) {
     log("ERROR", `Invalid date: ${dateStr}. Use DD-MM-YYYY.`);
-    return false;
+    process.exit(1);
   }
 
   const bookings = await loadBookings();
@@ -22,16 +22,26 @@ async function addBookingEntry(dateStr: string): Promise<boolean> {
     log("INFO", `Added booking ${dateStr}.`);
   }
 
-  bookings.sort((a, b) => new Date(a.parking_date).getTime() - new Date(b.parking_date).getTime());
+  bookings.sort((a, b) => parseDate(a.parking_date).getTime() - parseDate(b.parking_date).getTime());
   return saveBookings(bookings);
 }
 
-(async () => {
-  const [,, flag, date] = process.argv;
-  if (flag === "--add" && date) {
-    const success = await addBookingEntry(date);
-    process.exit(success ? 0 : 1);
+function parseCliArgs(): string {
+  const args = process.argv.slice(2);
+  if (args.length !== 1) {
+    log("ERROR", "Usage: npm run add-booking <DD-MM-YYYY>");
+    process.exit(1);
   }
-  log("ERROR", "Usage: npm run add-booking -- <DD-MM-YYYY>");
+  return args[0];
+}
+
+async function main(): Promise<void> {
+  const date = parseCliArgs();
+  const success = await addBookingEntry(date);
+  process.exit(success ? 0 : 1);
+}
+
+main().catch(error => {
+  log("ERROR", error.message);
   process.exit(1);
-})();
+});

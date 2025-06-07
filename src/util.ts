@@ -2,8 +2,6 @@ import { format, parse } from "date-fns";
 import path from "path";
 import * as fs from "fs/promises";
 
-const BOOKINGS_FILE = path.join(__dirname, "..", "bookings.json");
-
 export type BookingStatus = "pending" | "booked" | "failed" | "no_space";
 export interface Booking {
   parking_date: string; // DD-MM-YYYY
@@ -13,6 +11,7 @@ export interface Booking {
   attempt_message?: string;
 }
 
+const BOOKINGS_FILE = path.resolve(__dirname, "..", "bookings.json");
 const TARGET_DATE_FORMAT = "dd-MM-yyyy";
 const LOG_DATE_FORMAT = "dd-MM-yyyy HH:mm:ss";
 
