@@ -23,7 +23,7 @@ export class WayleadrPage {
   private get calendar(): Locator { return this.page.locator('#ui-datepicker-div'); }
   private dayCell(day: string): Locator { return this.calendar.locator(`a.ui-state-default:has-text("${day}")`); }
 
-  private get noSpacesMessage(): Locator { return this.page.getByText('There are no available spaces'); }
+  private get noSpacesMessage(): Locator { return this.page.getByText('There are no available spaces.'); }
   private get submitButton(): Locator { return this.page.getByRole('button', { name: 'Request Space' }); }
   private get successAlert(): Locator { return this.page.locator('.alert-success'); }
   private get errorAlert(): Locator { return this.page.locator('.alert-danger'); }
@@ -65,7 +65,8 @@ export class WayleadrPage {
   }
 
   async isSharedSpaceUnavailable(): Promise<boolean> {
-    return this.noSpacesMessage.isVisible().catch(() => false);
+    await this.noSpacesMessage.waitFor();
+    return await this.noSpacesMessage.isVisible();
   }
 
   async switchToPaidParking() {
