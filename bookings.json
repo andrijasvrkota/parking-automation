@@ -1,7 +1,9 @@
 [
   {
     "parking_date": "11-06-2025",
-    "status": "pending",
-    "created_at": "09-06-2025"
+    "status": "failed",
+    "created_at": "09-06-2025",
+    "last_attempt": "10-06-2025",
+    "attempt_message": "Booking not successful on 10-06-2025. Result: failed"
   }
 ]
