@@ -4,6 +4,7 @@ import { BookingStatus, getDay } from "./util";
 const DEFAULT_TIMEOUT = 20_000;
 const PAID_PARKING_OPTION = 'Paid Parking';
 const ESCAPE_BUTTON = 'Escape';
+const NETWORK_IDLE_STATE = 'networkidle';
 
 export class WayleadrPage {
 
@@ -62,11 +63,16 @@ export class WayleadrPage {
     await this.calendar.click();
     await this.dayCell(day).click();
     await this.page.keyboard.press(ESCAPE_BUTTON); //dismiss calendar popup
+    await this.page.waitForLoadState(NETWORK_IDLE_STATE);
   }
 
   async isSharedSpaceUnavailable(): Promise<boolean> {
-    await this.noSpacesMessage.waitFor();
-    return await this.noSpacesMessage.isVisible();
+    try {
+      await this.noSpacesMessage.waitFor({ timeout: DEFAULT_TIMEOUT });
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   async switchToPaidParking() {
