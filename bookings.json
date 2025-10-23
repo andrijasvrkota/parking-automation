@@ -1,14 +1,9 @@
 [
   {
-    "parking_date": "23-07-2025",
-    "status": "failed",
-    "created_at": "20-07-2025",
-    "last_attempt": "22-07-2025",
-    "attempt_message": "Booking not successful on 22-07-2025. Result: failed"
-  },
-  {
     "parking_date": "24-10-2025",
-    "status": "pending",
-    "created_at": "20-10-2025"
+    "status": "failed",
+    "created_at": "20-10-2025",
+    "last_attempt": "23-10-2025",
+    "attempt_message": "Booking not successful on 23-10-2025. Result: failed"
   }
 ]
