@@ -1,19 +1,5 @@
 [
   {
-    "parking_date": "14-11-2025",
-    "status": "failed",
-    "created_at": "12-11-2025",
-    "last_attempt": "13-11-2025",
-    "attempt_message": "Booking not successful on 13-11-2025. Result: failed"
-  },
-  {
-    "parking_date": "18-11-2025",
-    "status": "failed",
-    "created_at": "12-11-2025",
-    "last_attempt": "17-11-2025",
-    "attempt_message": "Booking not successful on 17-11-2025. Result: failed"
-  },
-  {
     "parking_date": "21-11-2025",
     "status": "failed",
     "created_at": "14-11-2025",
@@ -22,8 +8,10 @@
   },
   {
     "parking_date": "26-11-2025",
-    "status": "pending",
-    "created_at": "24-11-2025"
+    "status": "failed",
+    "created_at": "24-11-2025",
+    "last_attempt": "25-11-2025",
+    "attempt_message": "Booking not successful on 25-11-2025. Result: failed"
   },
   {
     "parking_date": "27-11-2025",
